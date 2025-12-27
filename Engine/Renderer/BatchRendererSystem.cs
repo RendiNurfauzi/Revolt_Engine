@@ -28,7 +28,7 @@ public class BatchRendererSystem : EngineModule
         uint vOffset = 0;
 
         // Sekarang kita mengambil TransformComponent, bukan Position lagi
-        var transformPool = ecs.World.GetPool<TransformComponent>();
+        var transformPool = ecs.World.GetPool<ECSTransform>();
         var entities = ecs.World.GetAllEntities();
 
         foreach (int entity in entities)

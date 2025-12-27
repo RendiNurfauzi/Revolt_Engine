@@ -7,7 +7,9 @@ using Revolt.Graphics.OpenGL;
 using Revolt.Game.Systems;
 using Revolt.Engine.ECS;
 using Revolt.Engine.Systems;
-using System.Numerics; // Pastikan namespace ini ada untuk BatchRenderer
+using System.Numerics;
+using Revolt.Game.Transform;
+using Revolt.Core.Math;
 
 var engine = new CoreEngine();
 
@@ -24,6 +26,7 @@ engine.RegisterSystem(new OpenGLInputSystem(graphics.GetWindow()));
 
 // --- 3. ENGINE CORE ---
 engine.RegisterSystem(new ECSSystem());
+engine.RegisterSystem(new WorldSystem(engine)); // <--- Tambahkan ini
 
 // --- 4. GAME LOGIC ---
 // TransformSystem HARUS ADA agar WorldMatrix dihitung sebelum digambar
@@ -33,13 +36,15 @@ engine.RegisterSystem(new MovementSystem(engine));
 // --- 5. RENDERING ---
 engine.RegisterSystem(new BatchRendererSystem(engine));
 
+engine.RegisterSystem(new DebugLoggerSystem(engine));
+
 // --- SETUP INITIAL DATA ---
 var ecs = engine.GetSystem<ECSSystem>();
 int p = ecs.World.CreateEntity();
 
 // Pastikan menggunakan TransformComponent, bukan Position lagi
-ecs.World.AddComponent(p, new TransformComponent { 
-    Position = new Vector3(400, 300, 0),
+ecs.World.AddComponent(p, new ECSTransform { 
+    Position = new Vector3d(4950.0, 0, 0),
     Scale = new Vector3(1, 1, 1),
     Rotation = Vector3.Zero,
     ParentId = -1 

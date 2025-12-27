@@ -1,8 +1,8 @@
-using System.Numerics;
 using Revolt.Core;
 using Revolt.Core.Input;
-using Revolt.Engine.ECS;
 using Revolt.Engine;
+using Revolt.Engine.ECS;
+using Revolt.Game.Transform;
 
 namespace Revolt.Game.Systems;
 
@@ -20,7 +20,7 @@ public class MovementSystem : GameModule
         var ecs = _engine.GetSystem<ECSSystem>();
 
         // 1. Ambil Pool TransformComponent (bukan Position)
-        var transformPool = ecs.World.GetPool<TransformComponent>();
+        var transformPool = ecs.World.GetPool<ECSTransform>();
         
         // 2. Ambil semua entitas yang aktif
         var entities = ecs.World.GetAllEntities();
