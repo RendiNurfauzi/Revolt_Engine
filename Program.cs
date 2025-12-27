@@ -1,2 +1,48 @@
-﻿// See https://aka.ms/new-console-template for more information
-Console.WriteLine("Hello, World!");
+﻿using Revolt.Core;
+using Revolt.Graphics;
+using Revolt.Core.Input;
+using Revolt.Engine;
+using RevoltEngine.Graphics.OpenGL;
+using Revolt.Graphics.OpenGL;
+using Revolt.Game.Systems;
+using Revolt.Engine.ECS;
+using Revolt.Engine.Systems;
+using System.Numerics; // Pastikan namespace ini ada untuk BatchRenderer
+
+var engine = new CoreEngine();
+
+// --- 1. DAFTARKAN RESOURCE SYSTEM DULU ---
+// Ini harus nomor satu karena sistem lain (Graphics) akan mencarinya saat Awake
+engine.RegisterSystem(new ResourceSystem());
+
+// --- 2. INFRASTRUCTURE ---
+// Sekarang OpenGLSystem bisa menemukan ResourceSystem tanpa error
+var graphics = new OpenGLSystem(engine);
+engine.RegisterSystem(graphics); 
+
+engine.RegisterSystem(new OpenGLInputSystem(graphics.GetWindow()));
+
+// --- 3. ENGINE CORE ---
+engine.RegisterSystem(new ECSSystem());
+
+// --- 4. GAME LOGIC ---
+// TransformSystem HARUS ADA agar WorldMatrix dihitung sebelum digambar
+engine.RegisterSystem(new TransformSystem(engine));
+engine.RegisterSystem(new MovementSystem(engine));
+
+// --- 5. RENDERING ---
+engine.RegisterSystem(new BatchRendererSystem(engine));
+
+// --- SETUP INITIAL DATA ---
+var ecs = engine.GetSystem<ECSSystem>();
+int p = ecs.World.CreateEntity();
+
+// Pastikan menggunakan TransformComponent, bukan Position lagi
+ecs.World.AddComponent(p, new TransformComponent { 
+    Position = new Vector3(400, 300, 0),
+    Scale = new Vector3(1, 1, 1),
+    Rotation = Vector3.Zero,
+    ParentId = -1 
+});
+
+engine.Run();
