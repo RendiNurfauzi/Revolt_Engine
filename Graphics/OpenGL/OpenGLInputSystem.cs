@@ -5,10 +5,10 @@ using Revolt.Core;
 
 namespace Revolt.Graphics.OpenGL;
 
-public class OpenGLInputSystem : EngineModule, IInputSystem
+public class OpenGLInputSystem : InputModule
 {
     public override string Name => "Input_System";
-    public override int Priority => 10; 
+    public override int Priority => 10;
 
     private IInputContext _inputContext;
     private readonly Dictionary<RevoltKey, bool> _keyStates = new();
@@ -25,32 +25,49 @@ public class OpenGLInputSystem : EngineModule, IInputSystem
             keyboard.KeyUp += (k, key, i) => OnKeyChange(key, false);
         }
     }
-
-private void OnKeyChange(Key key, bool isDown)
-{
-    var revoltKey = key switch
+    public override bool IsMouseButtonDown(RevoltMouseButton button)
     {
-        Key.W => RevoltKey.W,
-        Key.A => RevoltKey.A,
-        Key.S => RevoltKey.S,
-        Key.D => RevoltKey.D,
-        Key.Up => RevoltKey.Up,
-        Key.Down => RevoltKey.Down,
-        Key.Left => RevoltKey.Left,
-        Key.Right => RevoltKey.Right,
-        Key.Space => RevoltKey.Space,
-        Key.ShiftLeft => RevoltKey.ShiftLeft,
-        Key.Escape => RevoltKey.Escape,
-        _ => (RevoltKey?)null
-    };
+        if (_inputContext.Mice.Count > 0)
+        {
+            // Konversi dari Revolt Enum ke Silk.NET Enum
+            var silkButton = button switch
+            {
+                RevoltMouseButton.Left => Silk.NET.Input.MouseButton.Left,
+                RevoltMouseButton.Right => Silk.NET.Input.MouseButton.Right,
+                RevoltMouseButton.Middle => Silk.NET.Input.MouseButton.Middle,
+                _ => Silk.NET.Input.MouseButton.Unknown
+            };
 
-    if (revoltKey.HasValue) _keyStates[revoltKey.Value] = isDown;
-}
+            return _inputContext.Mice[0].IsButtonPressed(silkButton);
+        }
+        return false;
+    }
+    private void OnKeyChange(Key key, bool isDown)
+    {
+        var revoltKey = key switch
+        {
+            Key.W => RevoltKey.W,
+            Key.A => RevoltKey.A,
+            Key.S => RevoltKey.S,
+            Key.D => RevoltKey.D,
+            Key.Up => RevoltKey.Up,
+            Key.Down => RevoltKey.Down,
+            Key.Left => RevoltKey.Left,
+            Key.Right => RevoltKey.Right,
+            Key.Space => RevoltKey.Space,
+            Key.ShiftLeft => RevoltKey.ShiftLeft,
+            Key.Escape => RevoltKey.Escape,
+            _ => (RevoltKey?)null
+        };
 
-    public bool IsKeyPressed(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
-    public bool IsKeyDown(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
+        if (revoltKey.HasValue) _keyStates[revoltKey.Value] = isDown;
+    }
 
-    public System.Numerics.Vector2 GetMousePosition()
+    public override bool IsKeyPressed(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
+    public override bool IsKeyDown(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
+    public bool IsMouseButtonDown(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
+
+    public override System.Numerics.Vector2 GetMousePosition()
     {
         if (_inputContext.Mice.Count > 0)
         {
@@ -61,7 +78,7 @@ private void OnKeyChange(Key key, bool isDown)
     }
 
     // Hanya override Shutdown untuk cleanup memori
-    public override void OnShutdown() 
+    public override void OnShutdown()
     {
         _inputContext?.Dispose();
         Console.WriteLine("[Input] Context Disposed.");
