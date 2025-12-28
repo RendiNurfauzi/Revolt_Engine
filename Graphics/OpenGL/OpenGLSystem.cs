@@ -30,11 +30,13 @@ public class OpenGLSystem : EngineModule, IGraphicsSystem
         var options = WindowOptions.Default;
         options.Size = new Silk.NET.Maths.Vector2D<int>(800, 600);
         options.Title = "RevoltEngine - Resource Managed";
-        
+
         _window = Window.Create(options);
         _window.Initialize();
         _gl = _window.CreateOpenGL();
-        
+        _gl!.Enable(EnableCap.DepthTest);
+        _gl.DepthFunc(DepthFunction.Lequal); // Objek lebih dekat menutup yang jauh
+
         // 2. Setup Hardware Buffers
         SetupBatchResources();
 
@@ -49,7 +51,7 @@ public class OpenGLSystem : EngineModule, IGraphicsSystem
         var resSystem = _engine.GetSystem<ResourceSystem>();
 
         // Kita minta ResourceSystem untuk membuat/mengambil shader
-        var shaderRes = resSystem.GetOrCreate("DefaultShader", () => 
+        var shaderRes = resSystem.GetOrCreate("DefaultShader", () =>
         {
             // Pindahkan logika compile ke sini sebagai "Factory"
             uint handle = CreateShader(GetDefaultVertexSource(), GetDefaultFragmentSource());
@@ -60,15 +62,67 @@ public class OpenGLSystem : EngineModule, IGraphicsSystem
         _gl!.UseProgram(_activeShaderProgram);
 
         // Set Projection Matrix
-        UpdateProjectionMatrix();
+        //UpdateProjectionMatrix();
+
+        _activeShaderProgram = shaderRes.ProgramHandle;
+        _gl!.UseProgram(_activeShaderProgram);
+
+        UpdateMatrices(); // Set awal
+    }
+
+    public void UpdateViewMatrix(Vector3 position, Vector3 target)
+    {
+        if (_gl == null) return;
+
+        // Hitung matriks View (Mata Kamera)
+        // Up vector menggunakan Vector3.UnitY (0, 1, 0)
+        var view = Matrix4x4.CreateLookAt(position, target, Vector3.UnitY);
+
+        unsafe
+        {
+            _gl.UseProgram(_activeShaderProgram);
+            int loc = _gl.GetUniformLocation(_activeShaderProgram, "uView");
+            if (loc != -1)
+            {
+                _gl.UniformMatrix4(loc, 1, false, (float*)&view);
+            }
+        }
     }
 
     private void UpdateProjectionMatrix()
     {
         var projection = Matrix4x4.CreateOrthographicOffCenter(0, 800, 600, 0, -1f, 1f);
-        unsafe {
+        unsafe
+        {
             int loc = _gl!.GetUniformLocation(_activeShaderProgram, "uProjection");
             if (loc != -1) _gl.UniformMatrix4(loc, 1, false, (float*)&projection);
+        }
+    }
+
+    private void UpdateMatrices()
+    {
+        if (_gl == null) return;
+
+        // 1. Perspective Matrix (Membuat objek jauh mengecil)
+        float fov = 60.0f * (MathF.PI / 180.0f); // 60 derajat ke Radian
+        float aspect = 800f / 600f;
+        var projection = Matrix4x4.CreatePerspectiveFieldOfView(fov, aspect, 0.1f, 20000.0f);
+
+        // 2. View Matrix (Posisi Mata/Kamera)
+        // Kita mundur ke Z = 1000 agar bisa melihat objek-objek di depan kita
+        var cameraPos = new Vector3(0, 0, 1000f);
+        var cameraTarget = Vector3.Zero; // Menghadap ke pusat (0,0,0)
+        var view = Matrix4x4.CreateLookAt(cameraPos, cameraTarget, Vector3.UnitY);
+
+        unsafe
+        {
+            _gl.UseProgram(_activeShaderProgram);
+
+            int projLoc = _gl.GetUniformLocation(_activeShaderProgram, "uProjection");
+            if (projLoc != -1) _gl.UniformMatrix4(projLoc, 1, false, (float*)&projection);
+
+            int viewLoc = _gl.GetUniformLocation(_activeShaderProgram, "uView");
+            if (viewLoc != -1) _gl.UniformMatrix4(viewLoc, 1, false, (float*)&view);
         }
     }
 
@@ -115,7 +169,7 @@ public class OpenGLSystem : EngineModule, IGraphicsSystem
 
         _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
         _gl.BufferData(BufferTargetARB.ArrayBuffer, 1024 * 1024, null, BufferUsageARB.DynamicDraw);
-        
+
         _gl.BindBuffer(BufferTargetARB.ElementArrayBuffer, _ebo);
         _gl.BufferData(BufferTargetARB.ElementArrayBuffer, 1024 * 1024, null, BufferUsageARB.DynamicDraw);
 
@@ -156,11 +210,16 @@ public class OpenGLSystem : EngineModule, IGraphicsSystem
 
     // Default Sources (Hanya fallback jika file tidak ditemukan)
     private string GetDefaultVertexSource() => @"#version 450 core
-        layout (location = 0) in vec3 aPos;
-        layout (location = 1) in vec4 aColor;
-        out vec4 vColor;
-        uniform mat4 uProjection;
-        void main() { gl_Position = uProjection * vec4(aPos, 1.0); vColor = aColor; }";
+    layout (location = 0) in vec3 aPos;
+    layout (location = 1) in vec4 aColor;
+    out vec4 vColor;
+    uniform mat4 uProjection;
+    uniform mat4 uView; // <--- WAJIB ADA
+    void main() { 
+        // Urutan perkalian sangat penting: Proj * View * Pos
+        gl_Position = uProjection * uView * vec4(aPos, 1.0); 
+        vColor = aColor; 
+    }";
 
     private string GetDefaultFragmentSource() => @"#version 450 core
         in vec4 vColor;

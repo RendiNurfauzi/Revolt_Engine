@@ -10,44 +10,54 @@ using Revolt.Engine.Systems;
 using System.Numerics;
 using Revolt.Game.Transform;
 using Revolt.Core.Math;
+using Revolt.Game.Entities;
 
 var engine = new CoreEngine();
 
-// --- 1. DAFTARKAN RESOURCE SYSTEM DULU ---
-// Ini harus nomor satu karena sistem lain (Graphics) akan mencarinya saat Awake
+// --- 1. RESOURCE & INFRASTRUCTURE ---
 engine.RegisterSystem(new ResourceSystem());
-
-// --- 2. INFRASTRUCTURE ---
-// Sekarang OpenGLSystem bisa menemukan ResourceSystem tanpa error
 var graphics = new OpenGLSystem(engine);
 engine.RegisterSystem(graphics); 
 
-engine.RegisterSystem(new OpenGLInputSystem(graphics.GetWindow()));
+// Daftarkan Input System agar bisa dibaca oleh CameraSystem
+var input = new OpenGLInputSystem(graphics.GetWindow());
+engine.RegisterSystem(input);
 
-// --- 3. ENGINE CORE ---
+// --- 2. ENGINE CORE ---
 engine.RegisterSystem(new ECSSystem());
-engine.RegisterSystem(new WorldSystem(engine)); // <--- Tambahkan ini
+engine.RegisterSystem(new WorldSystem(engine));
 
-// --- 4. GAME LOGIC ---
-// TransformSystem HARUS ADA agar WorldMatrix dihitung sebelum digambar
+// --- 3. GAME LOGIC & CAMERA ---
+// CameraSystem ditaruh di sini agar posisi kamera diupdate sebelum render
+engine.RegisterSystem(new CameraSystem(engine));
 engine.RegisterSystem(new TransformSystem(engine));
 engine.RegisterSystem(new MovementSystem(engine));
 
-// --- 5. RENDERING ---
+// --- 4. RENDERING & DEBUG ---
 engine.RegisterSystem(new BatchRendererSystem(engine));
-
 engine.RegisterSystem(new DebugLoggerSystem(engine));
 
-// --- SETUP INITIAL DATA ---
+// --- SETUP INITIAL DATA (3D STRESS TEST) ---
 var ecs = engine.GetSystem<ECSSystem>();
-int p = ecs.World.CreateEntity();
+var random = new Random();
 
-// Pastikan menggunakan TransformComponent, bukan Position lagi
-ecs.World.AddComponent(p, new ECSTransform { 
-    Position = new Vector3d(4950.0, 0, 0),
-    Scale = new Vector3(1, 1, 1),
-    Rotation = Vector3.Zero,
-    ParentId = -1 
-});
+// Spawn 50.000 Asteroid menggunakan Blueprint dari EntityFactory
+for (int i = 0; i < 50000; i++)
+{
+    // Kita sebar di area yang luas
+    var pos = new Vector3d(
+        random.Next(-5000, 5000), 
+        random.Next(-5000, 5000), 
+        random.Next(-10000, 500) // Sebar jauh ke depan (Z negatif)
+    );
 
+    // Sekarang menggunakan factory, bukan AddComponent manual di sini
+    float randomSize = (float)random.NextDouble() * 5.0f + 1.0f;
+    EntityFactory.CreateAsteroid(ecs, pos, randomSize);
+}
+
+// Tambahkan Player menggunakan factory juga
+EntityFactory.CreatePlayer(ecs, new Vector3d(0, 0, 0));
+
+// Jalankan Engine
 engine.Run();

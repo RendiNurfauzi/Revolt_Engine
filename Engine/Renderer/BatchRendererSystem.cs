@@ -8,13 +8,23 @@ namespace Revolt.Engine.Systems;
 public class BatchRendererSystem : EngineModule
 {
     public override string Name => "Batch_Renderer";
-    public override int Priority => 500; // Render dijalankan paling akhir
+    public override int Priority => 500;
 
     private readonly CoreEngine _engine;
-    
-    // Penampung data vertex yang dikirim ke GPU
-    private float[] _vertexBatch = new float[20000]; // Kapasitas diperbesar
-    private uint[] _indexBatch = new uint[10000];
+
+    // --- KONFIGURASI BATCH ---
+    private const int MaxQuads = 2500; // Batas per satu tarikan gambar (Draw Call)
+    private const int VerticesPerQuad = 4;
+    private const int IndicesPerQuad = 6;
+    private const int FloatsPerVertex = 7; // Pos(3) + Color(4)
+
+    private readonly float[] _vertexBatch = new float[MaxQuads * VerticesPerQuad * FloatsPerVertex];
+    private readonly uint[] _indexBatch = new uint[MaxQuads * IndicesPerQuad];
+
+    private int _vIndex = 0;
+    private int _iIndex = 0;
+    private uint _vOffset = 0;
+    private int _quadCount = 0;
 
     public BatchRendererSystem(CoreEngine engine) => _engine = engine;
 
@@ -23,77 +33,87 @@ public class BatchRendererSystem : EngineModule
         var ecs = _engine.GetSystem<ECSSystem>();
         var graphics = _engine.GetSystem<IGraphicsSystem>();
 
-        int vIndex = 0;
-        int iIndex = 0;
-        uint vOffset = 0;
-
-        // Sekarang kita mengambil TransformComponent, bukan Position lagi
         var transformPool = ecs.World.GetPool<ECSTransform>();
         var entities = ecs.World.GetAllEntities();
 
+        // Reset index untuk frame baru
+        StartBatch();
+
         foreach (int entity in entities)
         {
-            // Cek apakah entitas punya data transform
             if (!transformPool.Contains(entity)) continue;
 
+            // --- AUTO-FLUSH LOGIC ---
+            // Jika penampung penuh, kirim ke GPU sekarang juga!
+            if (_quadCount >= MaxQuads)
+            {
+                Flush(graphics);
+            }
+
             ref var transform = ref transformPool.Get(entity);
-            
-            // Ukuran dasar quad (bisa dipindah ke SpriteComponent nantinya)
-            float size = 50f; 
+            // Di dalam loop foreach BatchRendererSystem
+            float s = 1; // half-size
 
-            // --- TRANSFORMASI VERTEX MENGGUNAKAN WORLD MATRIX ---
-            // Kita hitung 4 sudut kotak secara lokal (0 sampai size)
-            // Lalu kalikan dengan WorldMatrix untuk mendapatkan posisi dunia yang benar (rotasi/skala/posisi)
-            
-            Vector3 pTL = Vector3.Transform(new Vector3(0, 0, 0), transform.WorldMatrix);       // Top Left
-            Vector3 pTR = Vector3.Transform(new Vector3(size, 0, 0), transform.WorldMatrix);    // Top Right
-            Vector3 pBR = Vector3.Transform(new Vector3(size, size, 0), transform.WorldMatrix); // Bottom Right
-            Vector3 pBL = Vector3.Transform(new Vector3(0, size, 0), transform.WorldMatrix);    // Bottom Left
+            // Kita buat 4 titik koordinat lokal (Z sekarang ikut serta)
+            Vector3 pTL = Vector3.Transform(new Vector3(-s, s, 0), transform.WorldMatrix);
+            Vector3 pTR = Vector3.Transform(new Vector3(s, s, 0), transform.WorldMatrix);
+            Vector3 pBR = Vector3.Transform(new Vector3(s, -s, 0), transform.WorldMatrix);
+            Vector3 pBL = Vector3.Transform(new Vector3(-s, -s, 0), transform.WorldMatrix);
 
-            // Warna (sementara hardcode merah, nanti bisa dari SpriteComponent)
             float r = 1f, g = 0f, b = 0f, a = 1f;
 
-            // Masukkan ke Buffer: Position (3f) + Color (4f)
-            
-            // Vertex 0: Top Right
-            AddVertex(ref vIndex, pTR, r, g, b, a);
-            // Vertex 1: Bottom Right
-            AddVertex(ref vIndex, pBR, r, g, b, a);
-            // Vertex 2: Bottom Left
-            AddVertex(ref vIndex, pBL, r, g, b, a);
-            // Vertex 3: Top Left
-            AddVertex(ref vIndex, pTL, r, g, b, a);
+            // Tambah Vertices
+            AddVertex(pTR, r, g, b, a);
+            AddVertex(pBR, r, g, b, a);
+            AddVertex(pBL, r, g, b, a);
+            AddVertex(pTL, r, g, b, a);
 
-            // Indices (2 Segitiga membentuk 1 Kotak)
-            _indexBatch[iIndex++] = vOffset + 0;
-            _indexBatch[iIndex++] = vOffset + 1;
-            _indexBatch[iIndex++] = vOffset + 2;
-            
-            _indexBatch[iIndex++] = vOffset + 2;
-            _indexBatch[iIndex++] = vOffset + 3;
-            _indexBatch[iIndex++] = vOffset + 0;
+            // Tambah Indices
+            _indexBatch[_iIndex++] = _vOffset + 0;
+            _indexBatch[_iIndex++] = _vOffset + 1;
+            _indexBatch[_iIndex++] = _vOffset + 2;
+            _indexBatch[_iIndex++] = _vOffset + 2;
+            _indexBatch[_iIndex++] = _vOffset + 3;
+            _indexBatch[_iIndex++] = _vOffset + 0;
 
-            vOffset += 4;
+            _vOffset += 4;
+            _quadCount++;
         }
 
-        // Kirim semua data yang terkumpul ke GPU dalam satu kali panggil
-        if (iIndex > 0)
+        // Gambar sisa entitas yang belum ter-flush
+        if (_iIndex > 0)
         {
-            graphics.SubmitBatch(_vertexBatch, _indexBatch, vIndex, iIndex);
+            Flush(graphics);
         }
 
         graphics.EndFrame();
     }
 
-    // Helper agar kode lebih bersih saat mengisi array vertex
-    private void AddVertex(ref int index, Vector3 pos, float r, float g, float b, float a)
+    private void StartBatch()
     {
-        _vertexBatch[index++] = pos.X;
-        _vertexBatch[index++] = pos.Y;
-        _vertexBatch[index++] = pos.Z;
-        _vertexBatch[index++] = r;
-        _vertexBatch[index++] = g;
-        _vertexBatch[index++] = b;
-        _vertexBatch[index++] = a;
+        _vIndex = 0;
+        _iIndex = 0;
+        _vOffset = 0;
+        _quadCount = 0;
+    }
+
+    private void Flush(IGraphicsSystem graphics)
+    {
+        // Kirim batch saat ini ke GPU
+        graphics.SubmitBatch(_vertexBatch, _indexBatch, _vIndex, _iIndex);
+
+        // Reset state untuk batch berikutnya dalam frame yang sama
+        StartBatch();
+    }
+
+    private void AddVertex(Vector3 pos, float r, float g, float b, float a)
+    {
+        _vertexBatch[_vIndex++] = pos.X;
+        _vertexBatch[_vIndex++] = pos.Y;
+        _vertexBatch[_vIndex++] = pos.Z;
+        _vertexBatch[_vIndex++] = r;
+        _vertexBatch[_vIndex++] = g;
+        _vertexBatch[_vIndex++] = b;
+        _vertexBatch[_vIndex++] = a;
     }
 }

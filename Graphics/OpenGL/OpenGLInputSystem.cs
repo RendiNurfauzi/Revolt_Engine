@@ -26,25 +26,29 @@ public class OpenGLInputSystem : EngineModule, IInputSystem
         }
     }
 
-    private void OnKeyChange(Key key, bool isDown)
+private void OnKeyChange(Key key, bool isDown)
+{
+    var revoltKey = key switch
     {
-        var revoltKey = key switch
-        {
-            Key.W => RevoltKey.W,
-            Key.A => RevoltKey.A,
-            Key.S => RevoltKey.S,
-            Key.D => RevoltKey.D,
-            Key.Up => RevoltKey.Up,
-            Key.Down => RevoltKey.Down,
-            Key.Left => RevoltKey.Left,
-            Key.Right => RevoltKey.Right,
-            _ => (RevoltKey?)null
-        };
+        Key.W => RevoltKey.W,
+        Key.A => RevoltKey.A,
+        Key.S => RevoltKey.S,
+        Key.D => RevoltKey.D,
+        Key.Up => RevoltKey.Up,
+        Key.Down => RevoltKey.Down,
+        Key.Left => RevoltKey.Left,
+        Key.Right => RevoltKey.Right,
+        Key.Space => RevoltKey.Space,
+        Key.ShiftLeft => RevoltKey.ShiftLeft,
+        Key.Escape => RevoltKey.Escape,
+        _ => (RevoltKey?)null
+    };
 
-        if (revoltKey.HasValue) _keyStates[revoltKey.Value] = isDown;
-    }
+    if (revoltKey.HasValue) _keyStates[revoltKey.Value] = isDown;
+}
 
     public bool IsKeyPressed(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
+    public bool IsKeyDown(RevoltKey key) => _keyStates.GetValueOrDefault(key, false);
 
     public System.Numerics.Vector2 GetMousePosition()
     {

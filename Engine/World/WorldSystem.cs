@@ -11,17 +11,18 @@ public class WorldSystem : EngineModule
     public override int Priority => 5; // Harus jalan paling awal sebelum Transform menghitung matriks
 
     private readonly CoreEngine _engine;
-    
+
     // Titik pusat semesta saat ini (Double Precision)
     public Vector3d CurrentOrigin { get; private set; } = Vector3d.Zero;
 
     // Batas jarak sebelum kita melakukan shifting (misal 5000 unit/meter)
     private const double ShiftThreshold = 5000.0;
-
+    public bool IsEnabled = false;
     public WorldSystem(CoreEngine engine) => _engine = engine;
 
     public override void OnUpdate(double dt)
     {
+        if (!IsEnabled) return;
         var ecs = _engine.GetSystem<ECSSystem>();
         var transformPool = ecs.World.GetPool<ECSTransform>();
 
@@ -30,7 +31,7 @@ public class WorldSystem : EngineModule
         if (transformPool.Contains(0))
         {
             ref var playerTr = ref transformPool.Get(0);
-            
+
             // Hitung jarak player ke Origin saat ini
             double distanceToOrigin = (playerTr.Position - CurrentOrigin).Length();
 
@@ -38,7 +39,7 @@ public class WorldSystem : EngineModule
             {
                 // SHIFTING: Pindahkan Origin ke posisi Player sekarang
                 CurrentOrigin = playerTr.Position;
-                
+
                 Console.WriteLine($"[World] Floating Origin Shifted to: {CurrentOrigin.X}, {CurrentOrigin.Y}");
             }
         }
