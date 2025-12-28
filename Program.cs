@@ -1,17 +1,12 @@
 ﻿using Revolt.Core;
-using Revolt.Graphics;
-using Revolt.Core.Input;
 using Revolt.Engine;
 using RevoltEngine.Graphics.OpenGL;
 using Revolt.Graphics.OpenGL;
 using Revolt.Game.Systems;
-using Revolt.Engine.ECS;
 using Revolt.Engine.Systems;
-using System.Numerics;
 using Revolt.Game.Transform;
 using Revolt.Core.Math;
 using Revolt.Game.Entities;
-using Revolt.Editor;
 using Revolt.Editor.Systems;
 
 var engine = new CoreEngine();
